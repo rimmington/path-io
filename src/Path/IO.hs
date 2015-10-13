@@ -21,7 +21,7 @@ module Path.IO (
     -- * Directory actions
     , withSystemTempDirectory
     , withCurrentDirectory, getCurrentDirectory
-    , createDirectoryIfMissing, doesDirectoryExist
+    , createDirectoryIfMissing, removeDirectoryRecursive, doesDirectoryExist
     -- * File actions
     , readFile, writeFile, copyFile
     , doesFileExist
@@ -79,6 +79,11 @@ writeFile fp = liftIO . BL.writeFile (toFilePath fp)
 -- | Create a directory (and optionally any parents) if required.
 createDirectoryIfMissing :: (MonadIO m) => Bool -> Dir -> m ()
 createDirectoryIfMissing createParents = liftIO . D.createDirectoryIfMissing createParents . toFilePath
+
+-- | Removes a directory and all contents.
+-- Be careful, if the directory contains symlinks, the function will follow them.
+removeDirectoryRecursive :: (MonadIO m) => Dir -> m ()
+removeDirectoryRecursive = liftIO . D.removeDirectoryRecursive . toFilePath
 
 -- | Is a directory at the specified path?
 doesDirectoryExist :: (MonadIO m) => Dir -> m Bool
