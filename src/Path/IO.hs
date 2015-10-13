@@ -23,7 +23,7 @@ module Path.IO (
     , withCurrentDirectory, getCurrentDirectory
     , createDirectoryIfMissing, removeDirectoryRecursive, doesDirectoryExist
     -- * File actions
-    , readFile, writeFile, copyFile
+    , readFile, writeFile, copyFile, withFile
     , doesFileExist
     -- * Modification and conversion
     , stripDir
@@ -42,6 +42,7 @@ import Path (Path, Rel, Abs, toFilePath, parseAbsDir, parseAbsFile)
 import qualified Path
 import qualified System.Directory as D
 import qualified System.FilePath as FP
+import qualified System.IO as IO
 import qualified System.IO.Temp as Tmp
 
 -- | An absolute path to a directory.
@@ -75,6 +76,10 @@ readFile = liftIO . BL.readFile . toFilePath
 -- | Write to a file.
 writeFile :: (MonadIO m) => File -> BL.ByteString -> m ()
 writeFile fp = liftIO . BL.writeFile (toFilePath fp)
+
+-- | Perform an action with a file handle.
+withFile :: (MonadBaseControl IO m) => File -> IO.IOMode -> (IO.Handle -> m a) -> m a
+withFile f = liftBaseOp . IO.withFile (toFilePath f)
 
 -- | Create a directory (and optionally any parents) if required.
 createDirectoryIfMissing :: (MonadIO m) => Bool -> Dir -> m ()
