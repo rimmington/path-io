@@ -1,0 +1,44 @@
+name:                path-io
+version:             0.1.0.0
+synopsis:            IO with well-typed paths.
+description:         Please see README.md
+homepage:            http://github.com/rimmington/path-io#readme
+license:             BSD3
+license-file:        LICENSE
+maintainer:          Rhys <rimmington@gmail.com>
+copyright:           (c) Swinburne Software Innovation Lab 2015
+category:            Filesystem
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Path.IO
+  build-depends:       base >= 4.8 && < 5
+                     , bytestring
+                     , path
+                     , directory
+                     , filepath
+                     , temporary
+                     , transformers
+                     , transformers-base
+                     , monad-control
+  default-language:    Haskell2010
+  other-extensions:    FlexibleContexts
+                     , TemplateHaskell
+                     , Trustworthy
+  ghc-options:         -Wall -Werror
+
+test-suite path-io-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , path-io
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall -Werror
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/rimmington/path-io
