@@ -21,25 +21,32 @@ module Path.IO (
     -- * Directory actions
     , withSystemTempDirectory
     , withCurrentDirectory, getCurrentDirectory
-    , createDirectoryIfMissing, removeDirectoryRecursive, doesDirectoryExist
+    , doesDirectoryExist, getDirectoryFiles, getFilesRecursive
+    , createDirectoryIfMissing, removeDirectoryRecursive
     -- * File actions
     , readFile, writeFile, copyFile, withFile
     , doesFileExist
     -- * Modification and conversion
-    , stripDir
+    , stripDir, parentDirs, takeExtension
     , dirFromRel, fileFromRel
-    , parseDir, parseFile ) where
+    , parseDir, parseFile, parseRelDir, parseRelFile
+    ) where
 
 import Prelude hiding (readFile, writeFile)
 
 import Control.Exception (SomeException, bracket, displayException)
+import Control.Monad (join, filterM)
 import Control.Monad.Base (liftBase)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl, liftBaseOp)
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as BL
-import Path (Path, Rel, Abs, toFilePath, parseAbsDir, parseAbsFile)
+import Data.Maybe (mapMaybe)
+import Path (
+      Path, Rel, Abs, (</>), toFilePath
+    , parseAbsDir, parseAbsFile)
 import qualified Path
+import qualified Path.Internal as PI
 import qualified System.Directory as D
 import qualified System.FilePath as FP
 import qualified System.IO as IO
@@ -111,6 +118,14 @@ parseDir = parseThing parseAbsDir
 parseFile :: String -> Either String File
 parseFile = parseThing parseAbsFile
 
+-- | Try to parse a relative directory path.
+parseRelDir :: String -> Either String RelDir
+parseRelDir = parseThing Path.parseRelDir
+
+-- | Try to parse a relative file path.
+parseRelFile :: String -> Either String RelFile
+parseRelFile = parseThing Path.parseRelFile
+
 parseThing :: (String -> Either SomeException a) -> String -> Either String a
 parseThing f = first displayException . f
 
@@ -132,3 +147,44 @@ pathFromRel f cwd = f . FP.normalise . toAbsApprox
   where
     toAbsApprox s | FP.isRelative s = toFilePath cwd FP.</> s
                   | otherwise       = s
+
+getDirectoryFiles :: (MonadIO m) => Dir -> m [RelFile]
+getDirectoryFiles dir = do
+    fns <- filteredDirContents dir
+    liftIO . chk doesFileExist $ mapMaybe Path.parseRelFile fns
+  where
+    chk f = filterM $ f . (dir </>)
+
+getFilesRecursive :: (MonadIO m) => Dir -> m [RelFile]
+getFilesRecursive dir = do
+    fns <- filteredDirContents dir
+    fs <- liftIO . chk doesFileExist $ mapMaybe Path.parseRelFile fns
+    ds <- liftIO . chk doesDirectoryExist $ mapMaybe Path.parseRelDir fns
+    (fs ++) . join <$> traverse (runDir dir) ds
+  where
+    runDir top d = fmap (d </>) <$> getFilesRecursive (top </> d)
+    chk f = filterM $ f . (dir </>)
+
+filteredDirContents :: (MonadIO m) => Dir -> m [FilePath]
+filteredDirContents = fmap (filter (`notElem` [".", ".."])) . liftIO . D.getDirectoryContents . toFilePath
+
+parentDirs :: Path Rel t -> [RelDir]
+parentDirs = reverse . go
+  where
+    go :: Path Rel t -> [RelDir]
+    go p = if str == "." then [] else pth : go pth
+      where
+        str = FP.takeDirectory . FP.dropTrailingPathSeparator $ toFilePath p
+        pth = PI.Path $ normalizeDir str
+
+-- | Get the extension of a file, returns @""@ for no extension, @".ext"@ otherwise.
+takeExtension :: Path t File -> String
+takeExtension = FP.takeExtension . toFilePath
+
+-- | Internal use for normalizing a directory.
+normalizeDir :: FilePath -> FilePath
+normalizeDir =
+  clean . FP.addTrailingPathSeparator . FP.normalise
+  where clean "./" = ""
+        clean ('/':'/':xs) = clean ('/':xs)
+        clean x = x
