@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE Trustworthy #-}
 {-# OPTIONS_HADDOCK show-extensions #-}
@@ -30,6 +31,8 @@ module Path.IO (
     , stripDir, parentDirs, takeExtension
     , dirFromRel, fileFromRel
     , parseDir, parseFile, parseRelDir, parseRelFile
+    -- * Environment
+    , findExecutable
     ) where
 
 import Prelude hiding (readFile, writeFile)
@@ -109,6 +112,9 @@ doesFileExist = liftIO . D.doesFileExist . toFilePath
 -- The permissions of old are copied to new, if possible.
 copyFile :: (MonadIO m) => File -> File -> m ()
 copyFile a = liftIO . D.copyFile (toFilePath a) . toFilePath
+
+findExecutable :: (MonadIO m) => String -> m (Maybe File)
+findExecutable = liftIO . fmap (parseAbsFile =<<) . D.findExecutable
 
 -- | Try to parse an absolute directory path.
 parseDir :: String -> Either String Dir
