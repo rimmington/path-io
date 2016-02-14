@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -21,6 +22,7 @@ module Path.IO (
       Dir, File, RelDir, RelFile
     -- * Directory actions
     , withSystemTempDirectory
+    , D.XdgDirectory (..), getXdgDirectory
     , withCurrentDirectory, getCurrentDirectory
     , doesDirectoryExist, getDirectoryFiles, getFilesRecursive
     , createDirectoryIfMissing, removeDirectoryRecursive
@@ -38,7 +40,7 @@ module Path.IO (
 import Prelude hiding (readFile, writeFile)
 
 import Control.Exception (SomeException, bracket, displayException)
-import Control.Monad (join, filterM)
+import Control.Monad (join, filterM, when)
 import Control.Monad.Base (liftBase)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl, liftBaseOp)
@@ -54,6 +56,9 @@ import qualified System.Directory as D
 import qualified System.FilePath as FP
 import qualified System.IO as IO
 import qualified System.IO.Temp as Tmp
+#ifdef Unixy
+import System.Posix.Files as U
+#endif
 
 -- | An absolute path to a directory.
 type Dir     = Path Abs Path.Dir
@@ -115,6 +120,23 @@ copyFile a = liftIO . D.copyFile (toFilePath a) . toFilePath
 
 findExecutable :: (MonadIO m) => String -> m (Maybe File)
 findExecutable = liftIO . fmap (parseAbsFile =<<) . D.findExecutable
+
+-- | Obtain the paths to special directories for storing user-specific
+-- application data, configuration, and cache files, conforming to the
+-- XDG Base Directory Specification. See 'D.getXdgDirectory'.
+getXdgDirectory :: (MonadIO m)
+                => D.XdgDirectory
+                -> RelDir
+                -> Bool   -- ^ Create the directory if it does not exist
+                -> m Dir
+getXdgDirectory typ rel creat = do
+    d <- liftIO $ parseAbsDir =<< D.getXdgDirectory typ (toFilePath rel)
+    when creat $ do
+        createDirectoryIfMissing True d
+#ifdef Unixy
+        liftIO $ U.setFileMode (toFilePath d) U.ownerModes
+#endif
+    pure d
 
 -- | Try to parse an absolute directory path.
 parseDir :: String -> Either String Dir

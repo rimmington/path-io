@@ -18,7 +18,7 @@ library
   build-depends:       base >= 4.8 && < 5
                      , bytestring
                      , path
-                     , directory
+                     , directory >= 1.2.3.0
                      , filepath
                      , temporary
                      , transformers
@@ -29,6 +29,10 @@ library
                      , TemplateHaskell
                      , Trustworthy
   ghc-options:         -Wall -Werror
+
+  if !os(windows)
+    build-depends:     unix
+    cpp-options:       -DUnixy
 
 test-suite path-io-test
   type:                exitcode-stdio-1.0
