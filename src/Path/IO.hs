@@ -22,7 +22,7 @@ module Path.IO (
       Dir, File, RelDir, RelFile
     -- * Directory actions
     , withSystemTempDirectory
-    , D.XdgDirectory (..), getXdgDirectory
+    , XdgDirectory (..), getXdgDirectory
     , withCurrentDirectory, getCurrentDirectory
     , doesDirectoryExist, getDirectoryFiles, getFilesRecursive
     , createDirectoryIfMissing, removeDirectoryRecursive
@@ -53,6 +53,12 @@ import Path (
 import qualified Path
 import qualified Path.Internal as PI
 import qualified System.Directory as D
+#if MIN_VERSION_directory(1,2,3)
+import System.Directory (XdgDirectory (..))
+#else
+import System.Environment (lookupEnv)
+import System.IO.Error (ioeSetLocation, modifyIOError)
+#endif
 import qualified System.FilePath as FP
 import qualified System.IO as IO
 import qualified System.IO.Temp as Tmp
@@ -125,12 +131,12 @@ findExecutable = liftIO . fmap (parseAbsFile =<<) . D.findExecutable
 -- application data, configuration, and cache files, conforming to the
 -- XDG Base Directory Specification. See 'D.getXdgDirectory'.
 getXdgDirectory :: (MonadIO m)
-                => D.XdgDirectory
+                => XdgDirectory
                 -> RelDir
                 -> Bool   -- ^ Create the directory if it does not exist
                 -> m Dir
 getXdgDirectory typ rel creat = do
-    d <- liftIO $ parseAbsDir =<< D.getXdgDirectory typ (toFilePath rel)
+    d <- liftIO $ parseAbsDir =<< _getXdgDirectory typ (toFilePath rel)
     when creat $ do
         createDirectoryIfMissing True d
 #ifdef Unixy
@@ -216,3 +222,41 @@ normalizeDir =
   where clean "./" = ""
         clean ('/':'/':xs) = clean ('/':xs)
         clean x = x
+
+--
+-- "Backported" from directory.
+--
+
+_getXdgDirectory :: XdgDirectory -> FilePath -> IO FilePath
+
+#if MIN_VERSION_directory(1,2,3)
+_getXdgDirectory = D.getXdgDirectory
+#else
+data XdgDirectory
+  = XdgData
+  | XdgConfig
+  | XdgCache
+  deriving (Bounded, Enum, Eq, Ord, Read, Show)
+
+_getXdgDirectory xdgDir suffix =
+  modifyIOError (`ioeSetLocation` "getXdgDirectory") $
+  FP.normalise . (FP.</> suffix) <$>
+  case xdgDir of
+    XdgData   -> get False "XDG_DATA_HOME"   ".local/share"
+    XdgConfig -> get False "XDG_CONFIG_HOME" ".config"
+    XdgCache  -> get True  "XDG_CACHE_HOME"  ".cache"
+  where
+#if defined(mingw32_HOST_OS)
+    get isLocal _ _ = Win32.sHGetFolderPath nullPtr which nullPtr 0
+      where which | isLocal   = win32_cSIDL_LOCAL_APPDATA
+                  | otherwise = Win32.cSIDL_APPDATA
+#else
+    get _ name fallback = do
+      env <- lookupEnv name
+      case env of
+        Nothing                        -> fallback'
+        Just path | FP.isRelative path -> fallback'
+                  | otherwise          -> return path
+      where fallback' = (FP.</> fallback) <$> D.getHomeDirectory
+#endif
+#endif
